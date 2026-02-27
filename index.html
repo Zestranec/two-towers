@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Twin Towers Dodge</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #090d1f;
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #fff;
+    }
+
+    #app {
+      position: relative;
+      width: 100%; height: 100%;
+      overflow: hidden;
+    }
+
+    /* ── Canvas ─────────────────────────────────────────────────────── */
+    #game-canvas {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%; height: 100%;
+    }
+
+    /* ── UI overlay ──────────────────────────────────────────────────── */
+    #ui-overlay {
+      position: absolute; inset: 0;
+      pointer-events: none;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 10px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+
+    #ui-overlay > * { pointer-events: auto; }
+
+    /* ── Top HUD ─────────────────────────────────────────────────────── */
+    #hud {
+      display: flex; gap: 6px; align-items: flex-start; flex-wrap: wrap;
+    }
+
+    .pill {
+      background: rgba(8, 14, 36, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      border-radius: 12px;
+      padding: 6px 11px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-size: 11px;
+      min-width: 68px;
+      flex: 0 0 auto;
+    }
+
+    .pill .label {
+      color: rgba(255, 255, 255, 0.5);
+      display: block;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 2px;
+    }
+
+    .pill .value {
+      font-weight: 700;
+      font-size: 13px;
+      display: block;
+    }
+
+    .pill .value.green  { color: #4ade80; }
+    .pill .value.purple { color: #c4b5fd; }
+    .pill .value.blue   { color: #93c5fd; }
+
+    /* ── Message banner ──────────────────────────────────────────────── */
+    #message-banner {
+      align-self: center;
+      text-align: center;
+      padding: 8px 18px;
+      background: rgba(8, 14, 36, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.88);
+      max-width: 380px;
+      width: 100%;
+      pointer-events: none;
+      transition: color 0.3s ease;
+    }
+
+    /* ── Bottom controls ─────────────────────────────────────────────── */
+    #controls {
+      width: min(460px, 100%);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #bet-row {
+      text-align: center;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.45);
+      letter-spacing: 0.3px;
+    }
+
+    .bet-amount  { color: #fbbf24; font-weight: 700; }
+    .bet-payout  { color: #4ade80; font-weight: 700; }
+
+    #tower-select {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .tower-btn {
+      padding: 13px 8px 11px;
+      border-radius: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      letter-spacing: 0.4px;
+    }
+
+    .tower-btn:active { transform: scale(0.95); }
+
+    .tower-btn .sub {
+      display: block;
+      font-size: 10px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 3px;
+    }
+
+    #tower-a.selected {
+      background: linear-gradient(140deg, rgba(82, 114, 245, 0.45), rgba(141, 160, 255, 0.28));
+      border-color: #5272f5;
+      box-shadow: 0 0 18px rgba(82, 114, 245, 0.38);
+    }
+
+    #tower-b.selected {
+      background: linear-gradient(140deg, rgba(242, 92, 168, 0.45), rgba(255, 159, 212, 0.28));
+      border-color: #f25ca8;
+      box-shadow: 0 0 18px rgba(242, 92, 168, 0.38);
+    }
+
+    #action-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    #btn-play {
+      height: 50px;
+      border: none;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #2dd68a, #22c55e);
+      color: #042810;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 22px rgba(34, 197, 94, 0.42);
+      transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    #btn-play:active {
+      transform: scale(0.96);
+      box-shadow: 0 2px 10px rgba(34, 197, 94, 0.28);
+    }
+
+    #btn-play:disabled {
+      opacity: 0.42;
+      cursor: default;
+      transform: none;
+      box-shadow: none;
+    }
+
+    #btn-sim {
+      height: 50px; width: 54px;
+      border: 1px solid rgba(109, 94, 249, 0.5);
+      border-radius: 14px;
+      background: rgba(109, 94, 249, 0.18);
+      color: #a5b4fc;
+      font-size: 22px;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    #btn-sim:active {
+      transform: scale(0.9);
+      background: rgba(109, 94, 249, 0.32);
+    }
+
+    /* ── Flash overlay ───────────────────────────────────────────────── */
+    #flash {
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 15;
+      opacity: 0;
+    }
+
+    #flash.win-flash {
+      background: rgba(74, 222, 128, 0.22);
+      animation: flashAnim 520ms ease-out forwards;
+    }
+
+    #flash.lose-flash {
+      background: rgba(255, 70, 70, 0.28);
+      animation: flashAnim 520ms ease-out forwards;
+    }
+
+    #flash.surprise-flash {
+      background: rgba(159, 122, 234, 0.28);
+      animation: flashAnim 420ms ease-out forwards;
+    }
+
+    @keyframes flashAnim {
+      0%   { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
+    /* ── Result popup ────────────────────────────────────────────────── */
+    #popup-overlay {
+      position: fixed; inset: 0;
+      display: none; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.68);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      z-index: 20;
+      padding: 16px;
+    }
+
+    #popup-overlay.visible { display: flex; }
+
+    #popup-card {
+      width: min(380px, 100%);
+      background: rgba(8, 13, 30, 0.97);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 24px;
+      padding: 28px 24px;
+      text-align: center;
+      animation: popIn 0.38s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes popIn {
+      from { transform: scale(0.78); opacity: 0; }
+      to   { transform: scale(1);    opacity: 1; }
+    }
+
+    #popup-icon    { font-size: 58px; margin-bottom: 10px; display: block; }
+    #popup-title   { font-size: 26px; font-weight: 900; margin-bottom: 6px; }
+    #popup-subtitle {
+      font-size: 14px; color: rgba(255,255,255,0.62);
+      margin-bottom: 16px; line-height: 1.55;
+    }
+
+    #popup-amount {
+      font-size: 38px; font-weight: 900; margin-bottom: 20px;
+    }
+
+    #popup-amount.win  { color: #4ade80; text-shadow: 0 0 24px rgba(74,222,128,0.55); }
+    #popup-amount.lose { color: #f87171; text-shadow: 0 0 24px rgba(248,113,113,0.55); }
+
+    #popup-btn {
+      width: 100%; height: 50px;
+      border: none; border-radius: 14px;
+      font-size: 16px; font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    #popup-btn:active { transform: scale(0.97); }
+
+    #popup-btn.win  {
+      background: linear-gradient(135deg, #4ade80, #22c55e);
+      color: #042810;
+      box-shadow: 0 4px 20px rgba(74, 222, 128, 0.38);
+    }
+
+    #popup-btn.lose {
+      background: linear-gradient(135deg, #6366f1, #4f46e5);
+      color: #fff;
+    }
+
+    /* ── Simulation modal ────────────────────────────────────────────── */
+    .sim-modal {
+      position: fixed; inset: 0; z-index: 30;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.72);
+      backdrop-filter: blur(10px);
+      padding: 16px;
+    }
+
+    .sim-card {
+      width: min(440px, 100%);
+      background: #0b1025;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      padding: 20px;
+      animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .sim-card h3 {
+      font-size: 17px; font-weight: 800;
+      margin-bottom: 14px; text-align: center;
+      color: #a78bfa;
+    }
+
+    .sim-row {
+      display: flex; justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      font-size: 13px;
+    }
+
+    .sim-row:last-of-type { border-bottom: none; }
+    .sim-row .key { color: rgba(255, 255, 255, 0.58); }
+    .sim-row .val { font-weight: 700; }
+    .sim-row .val.rtp { color: #4ade80; font-size: 15px; }
+
+    .sim-card button {
+      margin-top: 14px; width: 100%; height: 42px;
+      border-radius: 12px; border: none;
+      background: #6366f1; color: #fff;
+      font-weight: 800; font-size: 14px; cursor: pointer;
+    }
+
+    .sim-card button:active { opacity: 0.8; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="ui-overlay">
+      <!-- Top HUD -->
+      <div id="hud">
+        <div class="pill">
+          <span class="label">BALANCE</span>
+          <span class="value green" id="balance-val">1000</span>
+        </div>
+        <div class="pill">
+          <span class="label">SEED</span>
+          <span class="value purple" id="seed-val">—</span>
+        </div>
+        <div class="pill">
+          <span class="label">STATE</span>
+          <span class="value blue" id="state-val">betting</span>
+        </div>
+      </div>
+
+      <!-- Middle message -->
+      <div id="message-banner">
+        <span id="message-val">Pick a tower and press START.</span>
+      </div>
+
+      <!-- Bottom controls -->
+      <div id="controls">
+        <div id="bet-row">
+          Bet: <span class="bet-amount">10 FUN</span>
+          &nbsp;·&nbsp;
+          Win: <span class="bet-payout">20 FUN (×2)</span>
+          &nbsp;·&nbsp;
+          RTP ≈ 95%
+        </div>
+        <div id="tower-select">
+          <button id="tower-a" class="tower-btn selected">
+            TOWER A
+            <span class="sub">Blue · left side</span>
+          </button>
+          <button id="tower-b" class="tower-btn">
+            TOWER B
+            <span class="sub">Pink · right side</span>
+          </button>
+        </div>
+        <div id="action-row">
+          <button id="btn-play">START ROUND</button>
+          <button id="btn-sim" title="Run RTP simulation">📊</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screen flash -->
+    <div id="flash"></div>
+
+    <!-- Round result popup -->
+    <div id="popup-overlay">
+      <div id="popup-card">
+        <span id="popup-icon">🏆</span>
+        <div id="popup-title">Tower Survived!</div>
+        <div id="popup-subtitle">Your chosen tower made it through.</div>
+        <div id="popup-amount" class="win">+20 FUN</div>
+        <button id="popup-btn" class="win">▶ PLAY AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
